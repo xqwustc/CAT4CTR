@@ -14,10 +14,12 @@
 # limitations under the License.
 # =========================================================================
 
-
 import os
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
+import sys
+sys.path.append('../../..')
+sys.path.append('../../../../')
 
 import sys
 import logging
