@@ -17,6 +17,8 @@
 
 import os
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
+
+
 import sys
 import logging
 import fuxictr_version
