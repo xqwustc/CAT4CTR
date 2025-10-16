@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug DNN run_expid",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/model_zoo/DNN/DNN_torch/run_expid.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--expid", "DNN_frappe",
+                "--gpu", "0"
+            ],
+            "cwd": "${workspaceFolder}/model_zoo/DNN/DNN_torch",
+            "justMyCode": false
+            // "stopOnEntry": true
+        }
+    ]
+}

@@ -56,8 +56,7 @@ DNN_default: # This is a config template
     monitor: {'AUC': 1, 'logloss': -1}
     monitor_mode: 'max'
 
-
-DNN_frappe: # This is a config template
+DNN_frappe:
     model: DNN
     dataset_id: frappe_x1
     loss: 'binary_crossentropy'
@@ -68,7 +67,7 @@ DNN_frappe: # This is a config template
     embedding_regularizer: 0
     net_regularizer: 0
     batch_size: 10000
-    embedding_dim: 40
+    embedding_dim: 16
     hidden_units: [500, 500, 500]
     hidden_activations: relu
     net_dropout: 0
@@ -78,3 +77,12 @@ DNN_frappe: # This is a config template
     seed: 2019
     monitor: {'AUC': 1, 'logloss': -1}
     monitor_mode: 'max'
+    # streaming: True              # Must be True to use ParquetBlockDataLoader
+    user_aggregate: True         # Enable user aggregation
+    resplit_data: True
+    use_split: True
+    split_ratios: [0.8, 0.1, 0.1]
+    # resplit_shuffle: True
+    # min_user_records: 100        # Filter out users with records < 100
+    # train_ratio: 0.8             # 80% of each user's data for training
+    # valid_ratio: 0.1             # 10% for validation (remaining 10% for test)

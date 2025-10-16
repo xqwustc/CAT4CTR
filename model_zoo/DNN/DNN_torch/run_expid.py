@@ -28,7 +28,7 @@ from fuxictr import datasets
 from datetime import datetime
 from fuxictr.utils import load_config, set_logger, print_to_json, print_to_list
 from fuxictr.features import FeatureMap
-from fuxictr.pytorch.dataloaders import RankDataLoader
+from fuxictr.pytorch.dataloaders import RankDataLoader, DatasetReSplitter
 from fuxictr.pytorch.torch_utils import seed_everything
 from fuxictr.preprocess import FeatureProcessor, build_dataset
 import src
@@ -64,6 +64,47 @@ if __name__ == '__main__':
     feature_map = FeatureMap(params['dataset_id'], data_dir)
     feature_map.load(feature_map_json, params)
     logging.info("Feature specs: " + print_to_json(feature_map.features))
+    
+    # 如果启用数据重划分，则先合并和重新划分数据
+    if params.get('resplit_data', False):
+        logging.info("Re-splitting datasets enabled")
+        splitter = DatasetReSplitter(
+            feature_map=feature_map,
+            train_path=params.get('train_data'),
+            valid_path=params.get('valid_data'),
+            test_path=params.get('test_data'),
+            data_format=params.get('data_format', 'npz'),
+            split_mode=params.get('split_mode', 'user_split'),  # 默认每个用户内部划分
+            user_col=params.get('user_col', None),  # 用户列名，None表示自动识别
+            min_records=params.get('min_records', 5)  # 过滤记录过少的用户
+        )
+        
+        # 重新划分数据
+        train_data, valid_data, test_data = splitter.split(
+            split_ratios=params.get('split_ratios', [0.7, 0.15, 0.15]),
+            random_seed=params.get('seed', 2024),
+            shuffle=params.get('resplit_shuffle', True)
+        )
+        
+        # 保存重新划分的数据
+        resplit_dir = os.path.join(data_dir, 'resplit')
+        new_train, new_valid, new_test = splitter.save(
+            train_data, valid_data, test_data,
+            output_dir=resplit_dir,
+            prefix='resplit'
+        )
+        
+    # 更新参数中的数据路径
+    if params.get('use_split', False):
+        resplit_dir = os.path.join(data_dir, 'resplit')
+        if not os.path.exists(resplit_dir):
+            os.makedirs(resplit_dir)
+        new_train, new_valid, new_test = (os.path.join(resplit_dir, 'resplit_train.parquet'), 
+                                        os.path.join(resplit_dir, 'resplit_valid.parquet'), 
+                                        os.path.join(resplit_dir, 'resplit_test.parquet'))
+        params['train_data'] = new_train
+        params['valid_data'] = new_valid
+        params['test_data'] = new_test
     
     model_class = getattr(src, params['model'])
     model = model_class(feature_map, **params)

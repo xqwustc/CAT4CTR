@@ -36,6 +36,8 @@ class ParquetDataset(Dataset):
     def load_data(self, data_path):
         df = pd.read_parquet(data_path)
         all_cols = list(self.feature_map.features.keys()) + self.feature_map.labels
+        self.all_cols = all_cols
+        self.df = df  # Save original DataFrame for cat_sample_select
         data_arrays = []
         for col in all_cols:
             if df[col].dtype == "object":
@@ -44,6 +46,79 @@ class ParquetDataset(Dataset):
                 array = df[col].to_numpy()
             data_arrays.append(array)
         return np.column_stack(data_arrays)
+
+    def cat_sample_select(self, sample_ratio=1.0, user_col=None):
+        """
+        Aggregate data by user, select sample subset for each user, then merge to form new training set
+        
+        Args:
+            sample_ratio: Sample ratio for each user (0-1), e.g. 0.7 means select 70% samples per user
+            user_col: User column name, None for auto detection
+            
+        Returns:
+            Resampled data array as np.column_stack(data_arrays)
+        """
+        # 1. Find user column index
+        if user_col is None:
+            # Auto detect user column
+            possible_names = ['user', 'user_id', 'userid', 'uid']
+            user_col = None
+            for name in possible_names:
+                if name in self.all_cols:
+                    user_col = name
+                    break
+            
+            if user_col is None:
+                # Find column containing 'user'
+                for col in self.all_cols:
+                    if 'user' in col.lower():
+                        user_col = col
+                        break
+            
+            if user_col is None:
+                raise ValueError("Cannot find user column. Please specify user_col parameter.")
+        
+        user_col_idx = self.all_cols.index(user_col)
+        
+        # 2. Aggregate by user
+        user_ids = self.darray[:, user_col_idx]
+        unique_users = np.unique(user_ids)
+        
+        # 3. Select sample subset for each user
+        selected_parts = {i: [] for i in range(len(self.all_cols))}
+        
+        for user_id in unique_users:
+            # Get all record indices for this user
+            user_mask = user_ids == user_id
+            user_indices = np.where(user_mask)[0]
+            n = len(user_indices)
+            
+            # Select sample subset for this user
+            select_count = int(n * sample_ratio)
+            if select_count > 0:
+                selected_indices = user_indices[:select_count]
+                
+                # Add selected data for this user
+                for col_idx in range(len(self.all_cols)):
+                    selected_parts[col_idx].append(self.darray[selected_indices, col_idx])
+        
+        # 4. Merge all users' parts and reorganize as np.column_stack(data_arrays)
+        data_arrays = []
+        for col_idx in range(len(self.all_cols)):
+            if selected_parts[col_idx]:
+                col_data = np.concatenate(selected_parts[col_idx], axis=0)
+            else:
+                col_data = np.array([])
+            data_arrays.append(col_data)
+        
+        total_selected = len(data_arrays[0]) if len(data_arrays) > 0 and len(data_arrays[0]) > 0 else 0
+        print(f"Selected {total_selected} samples from {len(unique_users)} users (ratio: {sample_ratio})")
+        
+        if total_selected == 0:
+            return np.array([]).reshape(0, len(self.all_cols))
+        
+        return np.column_stack(data_arrays)
+
 
 
 class ParquetDataLoader(DataLoader):

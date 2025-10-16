@@ -106,3 +106,12 @@ venv.bak/
 _build
 checkpoints
 *.csv
+data/frappe_x1/feature_map.json
+data/frappe_x1/feature_processor.pkl
+data/frappe_x1/feature_vocab.json
+data/frappe_x1/test.parquet
+data/frappe_x1/train.parquet
+data/frappe_x1/valid.parquet
+data/frappe_x1/resplit/resplit_test.parquet
+data/frappe_x1/resplit/resplit_train.parquet
+data/frappe_x1/resplit/resplit_valid.parquet
