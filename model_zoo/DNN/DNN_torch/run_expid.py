@@ -28,7 +28,10 @@ from datetime import datetime
 from fuxictr.utils import load_config, set_logger, print_to_json, print_to_list
 from fuxictr.features import FeatureMap
 from fuxictr.pytorch.dataloaders import RankDataLoader, DatasetReSplitter
+from fuxictr.pytorch.dataloaders.parquet_dataloader import ParquetDataLoader as ParquetLoader
 from fuxictr.pytorch.torch_utils import seed_everything
+import pandas as pd
+import numpy as np
 from fuxictr.preprocess import FeatureProcessor, build_dataset
 import src
 import gc
@@ -182,9 +185,37 @@ if __name__ == '__main__':
         # ========== Step 2: Train model using pretrain_data ==========
         logging.info("\n[Step 2] Pretraining with 70% user data...")
         
+        # Split pretrain_data into train and valid (8:1 by sample count, not by user)
+        logging.info("  Splitting pretrain data into train:valid = 8:1 (by sample count)...")
+        splitter_pretrain = DatasetReSplitter(
+            feature_map=feature_map,
+            train_path=pretrain_path,
+            valid_path=None,
+            test_path=None,
+            data_format=params.get('data_format', 'npz'),
+            split_mode='random',  # Random split by samples, not by user
+            user_col=params.get('user_col', None),
+            min_records=0  # No filtering here
+        )
+        
+        pretrain_train_data, pretrain_valid_data, _ = splitter_pretrain.split(
+            split_ratios=[8.0/9.0, 1.0/9.0, 0.0],  # 8:1 ratio
+            random_seed=params.get('seed', 2024),
+            shuffle=True
+        )
+        
+        pretrain_train_path, pretrain_valid_path, _ = splitter_pretrain.save(
+            pretrain_train_data, pretrain_valid_data, None,
+            output_dir=user_split_dir,
+            prefix='pretrain'
+        )
+        
+        logging.info(f"    Train samples: {len(pretrain_train_data)}")
+        logging.info(f"    Valid samples: {len(pretrain_valid_data)}")
+        
         pretrain_params = params.copy()
-        pretrain_params['train_data'] = pretrain_path
-        pretrain_params['valid_data'] = pretrain_path
+        pretrain_params['train_data'] = pretrain_train_path
+        pretrain_params['valid_data'] = pretrain_valid_path
         pretrain_params['test_data'] = None
         
         model_class = getattr(src, params['model'])
@@ -247,9 +278,61 @@ if __name__ == '__main__':
         # ========== Fine-tune using query data, test on test data ==========
         logging.info("\n[Step 5] Fine-tuning model on new user data...")
         
+        # Split query_data into train and valid (8:1 by sample count, not by user)
+        logging.info("  Splitting query data into train:valid = 8:1 (by sample count)...")
+        splitter_finetune = DatasetReSplitter(
+            feature_map=feature_map,
+            train_path=query_path,
+            valid_path=None,
+            test_path=None,
+            data_format=params.get('data_format', 'npz'),
+            split_mode='random',  # Random split by samples, not by user
+            user_col=params.get('user_col', None),
+            min_records=0  # No filtering here
+        )
+        
+        finetune_train_data, finetune_valid_data, _ = splitter_finetune.split(
+            split_ratios=[8.0/9.0, 1.0/9.0, 0.0],  # 8:1 ratio
+            random_seed=params.get('seed', 2024),
+            shuffle=True
+        )
+        
+        finetune_train_path, finetune_valid_path, _ = splitter_finetune.save(
+            finetune_train_data, finetune_valid_data, None,
+            output_dir=per_user_split_dir,
+            prefix='finetune'
+        )
+        
+        logging.info(f"    Train samples: {len(finetune_train_data)}")
+        logging.info(f"    Valid samples: {len(finetune_valid_data)}")
+        
+        # ========== Apply cat_sample_select to finetune training data ==========
+        logging.info("  Applying cat_sample_select to select sample subset per user...")
+        sample_ratio = params.get('cat_sample_ratio', 0.7)  # Default 70% samples per user
+        
+        # Load finetune training data
+        parquet_loader = ParquetLoader(
+            feature_map=feature_map,
+            data_path=finetune_train_path
+        )
+        
+        # Apply cat_sample_select on the dataset
+        sampled_data_array = parquet_loader.dataset.cat_sample_select(
+            sample_ratio=sample_ratio,
+            user_col=params.get('user_col', None)
+        )
+        
+        # Convert back to DataFrame and save
+        sampled_df = pd.DataFrame(sampled_data_array, columns=parquet_loader.dataset.all_cols)
+        finetune_train_sampled_path = os.path.join(per_user_split_dir, 'finetune_train_sampled.parquet')
+        sampled_df.to_parquet(finetune_train_sampled_path, index=False)
+        
+        logging.info(f"    Sampled train data saved: {finetune_train_sampled_path}")
+        logging.info(f"    Samples after selection: {len(sampled_df)} (ratio: {sample_ratio})")
+        
         finetune_params = params.copy()
-        finetune_params['train_data'] = query_path
-        finetune_params['valid_data'] = query_path
+        finetune_params['train_data'] = finetune_train_sampled_path  # Use sampled data
+        finetune_params['valid_data'] = finetune_valid_path
         finetune_params['test_data'] = test_path
         
         # Create new model
