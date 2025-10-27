@@ -86,3 +86,30 @@ DNN_frappe:
     # min_user_records: 100        # Filter out users with records < 100
     # train_ratio: 0.8             # 80% of each user's data for training
     # valid_ratio: 0.1             # 10% for validation (remaining 10% for test)
+
+DNN_cat_frappe:
+    model: DNN
+    dataset_id: frappe_x1
+    loss: 'binary_crossentropy'
+    metrics: ['logloss', 'AUC']
+    task: binary_classification
+    optimizer: adam
+    learning_rate: 1.e-3
+    embedding_regularizer: 0
+    net_regularizer: 0
+    batch_size: 10000
+    embedding_dim: 16
+    hidden_units: [500, 500, 500]
+    hidden_activations: relu
+    net_dropout: 0
+    batch_norm: False
+    epochs: 100
+    shuffle: True
+    seed: 2019
+    monitor: {'AUC': 1, 'logloss': -1}
+    monitor_mode: 'max'
+    # Transfer learning related configuration
+    enable_transfer_learning: True   # Enable transfer learning mode
+    user_col: user                    # User column name, null means auto-detect (will search for columns containing 'user')
+    min_records: 15                    # Filter out users with too few records
+    resplit_shuffle: True             # Whether to shuffle data when splitting

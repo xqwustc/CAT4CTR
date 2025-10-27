@@ -532,35 +532,68 @@ class DatasetReSplitter(object):
         Save re-split data to files
         
         Args:
-            train_data: Training set data
-            valid_data: Validation set data
-            test_data: Test set data
+            train_data: Training set data (can be None)
+            valid_data: Validation set data (can be None)
+            test_data: Test set data (can be None)
             output_dir: Output directory
             prefix: File name prefix
             
         Returns:
-            train_path, valid_path, test_path: Saved file paths
+            train_path, valid_path, test_path: Saved file paths (None if data is None)
         """
         os.makedirs(output_dir, exist_ok=True)
         
+        train_path = None
+        valid_path = None
+        test_path = None
+        
         if self.data_format == 'npz':
-            train_path = os.path.join(output_dir, f'{prefix}_train.npz')
-            valid_path = os.path.join(output_dir, f'{prefix}_valid.npz')
-            test_path = os.path.join(output_dir, f'{prefix}_test.npz')
+            # Save train data
+            if train_data is not None:
+                train_path = os.path.join(output_dir, f'{prefix}_train.npz')
+                np.savez_compressed(train_path, **train_data)
+            else:
+                logging.warning(f"Train data is None, skipping save for {prefix}_train.npz")
             
-            np.savez_compressed(train_path, **train_data)
-            np.savez_compressed(valid_path, **valid_data)
-            np.savez_compressed(test_path, **test_data)
+            # Save valid data
+            if valid_data is not None:
+                valid_path = os.path.join(output_dir, f'{prefix}_valid.npz')
+                np.savez_compressed(valid_path, **valid_data)
+            else:
+                logging.warning(f"Valid data is None, skipping save for {prefix}_valid.npz")
+            
+            # Save test data
+            if test_data is not None:
+                test_path = os.path.join(output_dir, f'{prefix}_test.npz')
+                np.savez_compressed(test_path, **test_data)
+            else:
+                logging.warning(f"Test data is None, skipping save for {prefix}_test.npz")
             
         else:  # parquet
-            train_path = os.path.join(output_dir, f'{prefix}_train.parquet')
-            valid_path = os.path.join(output_dir, f'{prefix}_valid.parquet')
-            test_path = os.path.join(output_dir, f'{prefix}_test.parquet')
+            # Save train data
+            if train_data is not None:
+                train_path = os.path.join(output_dir, f'{prefix}_train.parquet')
+                train_data.to_parquet(train_path, index=False)
+            else:
+                logging.warning(f"Train data is None, skipping save for {prefix}_train.parquet")
             
-            train_data.to_parquet(train_path, index=False)
-            valid_data.to_parquet(valid_path, index=False)
-            test_data.to_parquet(test_path, index=False)
+            # Save valid data
+            if valid_data is not None:
+                valid_path = os.path.join(output_dir, f'{prefix}_valid.parquet')
+                valid_data.to_parquet(valid_path, index=False)
+            else:
+                logging.warning(f"Valid data is None, skipping save for {prefix}_valid.parquet")
+            
+            # Save test data
+            if test_data is not None:
+                test_path = os.path.join(output_dir, f'{prefix}_test.parquet')
+                test_data.to_parquet(test_path, index=False)
+            else:
+                logging.warning(f"Test data is None, skipping save for {prefix}_test.parquet")
         
-        logging.info(f"Saved re-split datasets to {output_dir}")
+        saved_files = [f for f in [train_path, valid_path, test_path] if f is not None]
+        if saved_files:
+            logging.info(f"Saved {len(saved_files)} dataset(s) to {output_dir}")
+        
         return train_path, valid_path, test_path
 
