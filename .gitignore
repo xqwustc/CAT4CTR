@@ -116,3 +116,4 @@ data/frappe_x1/resplit/resplit_test.parquet
 data/frappe_x1/resplit/resplit_train.parquet
 data/frappe_x1/resplit/resplit_valid.parquet
 *.model
+*.parquet
