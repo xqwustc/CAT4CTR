@@ -113,4 +113,4 @@ DNN_cat_frappe:
     user_col: user                    # User column name, null means auto-detect (will search for columns containing 'user')
     min_records: 15                    # Filter out users with too few records
     resplit_shuffle: True             # Whether to shuffle data when splitting
-    cat_sample_ratio: 0.7             # Sample ratio per user for fine-tuning (e.g., 0.7 means 70% samples per user)
+    cat_sample_ratio: 1             # Sample ratio per user for fine-tuning (e.g., 0.7 means 70% samples per user)

@@ -165,6 +165,32 @@ class BaseModel(nn.Module):
         logging.info("Training finished.")
         logging.info("Load best model: {}".format(self.checkpoint))
         self.load_weights(self.checkpoint)
+    
+    def fit_selection(self, data_generator,
+            max_gradient_norm=10., **kwargs):
+        self._max_gradient_norm = max_gradient_norm
+        self._best_metric = np.inf if self._monitor_mode == "min" else -np.inf
+        self._stopping_steps = 0
+        self._steps_per_epoch = len(data_generator)
+        self._stop_training = False
+        self._total_steps = 0
+        self._batch_index = 0
+        self._epoch_index = 0
+        epochs = 20
+        self._eval_steps = epochs*self._steps_per_epoch + 1
+        
+        logging.info("Start training: {} batches/epoch".format(self._steps_per_epoch))
+        logging.info("************ Epoch=1 start ************")
+        for epoch in range(epochs):
+            self._epoch_index = epoch
+            self.train_epoch(data_generator)
+            if self._stop_training:
+                break
+            else:
+                logging.info("************ Epoch={} end ************".format(self._epoch_index + 1))
+        logging.info("Training finished.")
+        #logging.info("Load best model: {}".format(self.checkpoint))
+        #self.load_weights(self.checkpoint)
 
     def checkpoint_and_earlystop(self, logs, min_delta=1e-6):
         monitor_value = self._monitor.get_value(logs)

@@ -105,6 +105,9 @@ def transfer_weights_except_user_embeddings(pretrained_checkpoint, new_model, us
     new_model.load_state_dict(new_state)
     
     logging.info(f"Parameter transfer completed: {len(transferred_params)} parameters transferred, {len(skipped_params)} parameters skipped")
+    for name, param in new_model.named_parameters():
+        if name in transferred_params:
+            param.requires_grad = False
     return new_model
 
 
@@ -278,34 +281,6 @@ if __name__ == '__main__':
         # ========== Fine-tune using query data, test on test data ==========
         logging.info("\n[Step 5] Fine-tuning model on new user data...")
         
-        # Split query_data into train and valid (8:1 by sample count, not by user)
-        logging.info("  Splitting query data into train:valid = 8:1 (by sample count)...")
-        splitter_finetune = DatasetReSplitter(
-            feature_map=feature_map,
-            train_path=query_path,
-            valid_path=None,
-            test_path=None,
-            data_format=params.get('data_format', 'npz'),
-            split_mode='random',  # Random split by samples, not by user
-            user_col=params.get('user_col', None),
-            min_records=0  # No filtering here
-        )
-        
-        finetune_train_data, finetune_valid_data, _ = splitter_finetune.split(
-            split_ratios=[8.0/9.0, 1.0/9.0, 0.0],  # 8:1 ratio
-            random_seed=params.get('seed', 2024),
-            shuffle=True
-        )
-        
-        finetune_train_path, finetune_valid_path, _ = splitter_finetune.save(
-            finetune_train_data, finetune_valid_data, None,
-            output_dir=per_user_split_dir,
-            prefix='finetune'
-        )
-        
-        logging.info(f"    Train samples: {len(finetune_train_data)}")
-        logging.info(f"    Valid samples: {len(finetune_valid_data)}")
-        
         # ========== Apply cat_sample_select to finetune training data ==========
         logging.info("  Applying cat_sample_select to select sample subset per user...")
         sample_ratio = params.get('cat_sample_ratio', 0.7)  # Default 70% samples per user
@@ -313,7 +288,7 @@ if __name__ == '__main__':
         # Load finetune training data
         parquet_loader = ParquetLoader(
             feature_map=feature_map,
-            data_path=finetune_train_path
+            data_path=query_path
         )
         
         # Apply cat_sample_select on the dataset
@@ -332,7 +307,7 @@ if __name__ == '__main__':
         
         finetune_params = params.copy()
         finetune_params['train_data'] = finetune_train_sampled_path  # Use sampled data
-        finetune_params['valid_data'] = finetune_valid_path
+        finetune_params['valid_data'] = None
         finetune_params['test_data'] = test_path
         
         # Create new model
@@ -345,13 +320,8 @@ if __name__ == '__main__':
         finetune_model.count_parameters()
         
         # Fine-tune
-        train_gen, valid_gen = RankDataLoader(feature_map, stage='train', **finetune_params).make_iterator()
-        finetune_model.fit(train_gen, validation_data=valid_gen, **finetune_params)
-        
-        logging.info('****** Query data evaluation (validation) ******')
-        valid_result = finetune_model.evaluate(valid_gen)
-        del train_gen, valid_gen
-        gc.collect()
+        train_gen, _ = RankDataLoader(feature_map, stage='train', **finetune_params).make_iterator()
+        finetune_model.fit_selection(train_gen,**finetune_params)
         
         test_result = {}
         if finetune_params["test_data"]:
@@ -361,11 +331,9 @@ if __name__ == '__main__':
         
         result_filename = Path(args['config']).name.replace(".yaml", "") + '_transfer_learning.csv'
         with open(result_filename, 'a+') as fw:
-            fw.write(' {},[command] python {},[exp_id] {},[dataset_id] {},[mode] transfer_learning,[val] {},[test] {}\n' \
+            fw.write(' {},[command] python {},[exp_id] {},[dataset_id] {},[mode] transfer_learning,[test] {}\n' \
                 .format(datetime.now().strftime('%Y%m%d-%H%M%S'), 
-                        ' '.join(sys.argv), experiment_id, params['dataset_id'],
-                        print_to_list(valid_result), print_to_list(test_result)))
-        
+                        ' '.join(sys.argv), experiment_id, params['dataset_id'], print_to_list(test_result)))
         logging.info("\n" + "="*80)
         logging.info("Transfer learning completed!")
         logging.info("="*80)
