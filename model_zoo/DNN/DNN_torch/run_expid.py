@@ -292,36 +292,34 @@ if __name__ == '__main__':
         )
         
         # Apply cat_sample_select on the dataset
-        sampled_data_array = parquet_loader.dataset.cat_sample_select(
-            sample_ratio=sample_ratio,
-            user_col=params.get('user_col', None)
-        )
-        
-        # Convert back to DataFrame and save
-        sampled_df = pd.DataFrame(sampled_data_array, columns=parquet_loader.dataset.all_cols)
-        finetune_train_sampled_path = os.path.join(per_user_split_dir, 'finetune_train_sampled.parquet')
-        sampled_df.to_parquet(finetune_train_sampled_path, index=False)
-        
-        logging.info(f"    Sampled train data saved: {finetune_train_sampled_path}")
-        logging.info(f"    Samples after selection: {len(sampled_df)} (ratio: {sample_ratio})")
-        
-        finetune_params = params.copy()
-        finetune_params['train_data'] = finetune_train_sampled_path  # Use sampled data
-        finetune_params['valid_data'] = None
-        finetune_params['test_data'] = test_path
-        
-        # Create new model
-        finetune_model = model_class(feature_map, **finetune_params)
-        
-        # Transfer pretrained parameters (skip user embeddings)
-        finetune_model = transfer_weights_except_user_embeddings(
-            pretrain_checkpoint, finetune_model, user_features
-        )
-        finetune_model.count_parameters()
-        
-        # Fine-tune
-        train_gen, _ = RankDataLoader(feature_map, stage='train', **finetune_params).make_iterator()
-        finetune_model.fit_selection(train_gen,**finetune_params)
+        for t in range(20):
+            sampled_data_array = parquet_loader.dataset.cat_sample_select("Random")
+            
+            # Convert back to DataFrame and save
+            sampled_df = pd.DataFrame(sampled_data_array, columns=parquet_loader.dataset.all_cols)
+            finetune_train_sampled_path = os.path.join(per_user_split_dir, 'finetune_train_sampled.parquet')
+            sampled_df.to_parquet(finetune_train_sampled_path, index=False)
+            
+            logging.info(f"    Sampled train data saved: {finetune_train_sampled_path}")
+            logging.info(f"    Samples after selection: {len(sampled_df)} (ratio: {sample_ratio})")
+            
+            finetune_params = params.copy()
+            finetune_params['train_data'] = finetune_train_sampled_path  # Use sampled data
+            finetune_params['valid_data'] = None
+            finetune_params['test_data'] = test_path
+            
+            # Create new model
+            finetune_model = model_class(feature_map, **finetune_params)
+            
+            # Transfer pretrained parameters (skip user embeddings)
+            finetune_model = transfer_weights_except_user_embeddings(
+                pretrain_checkpoint, finetune_model, user_features
+            )
+            finetune_model.count_parameters()
+            
+            # Fine-tune
+            train_gen, _ = RankDataLoader(feature_map, stage='train', **finetune_params).make_iterator()
+            finetune_model.fit_selection(train_gen,**finetune_params)
         
         test_result = {}
         if finetune_params["test_data"]:

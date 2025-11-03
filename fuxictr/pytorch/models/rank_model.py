@@ -176,7 +176,7 @@ class BaseModel(nn.Module):
         self._total_steps = 0
         self._batch_index = 0
         self._epoch_index = 0
-        epochs = 20
+        epochs = 3
         self._eval_steps = epochs*self._steps_per_epoch + 1
         
         logging.info("Start training: {} batches/epoch".format(self._steps_per_epoch))
