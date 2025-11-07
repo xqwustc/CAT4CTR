@@ -63,3 +63,15 @@ class DNN(BaseModel):
         return_dict = {"y_pred": y_pred}
         return return_dict
         
+    def get_item_fisher(self, user,data):
+        fisher = 0
+        for label in [0,1]:
+            p = self.forward(data)['y_pred']
+            if label == 0:
+                log_p = torch.log(p+1e-10)
+            else:
+                log_p = torch.log(1-p+1e-10)
+            grad = torch.autograd.grad(log_p, self.embedding_layer.embedding_layer.embedding_layers['user'].weight, retain_graph=True, create_graph=False)[0][user]
+            weight = p if label == 1. else (1 - p)
+            fisher += weight * torch.sum(grad**2)
+        return fisher.detach()
