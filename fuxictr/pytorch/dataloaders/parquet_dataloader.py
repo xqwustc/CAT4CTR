@@ -89,9 +89,7 @@ class ParquetDataset(Dataset):
         if self.selected_item == None:
             unique_users = np.unique(user_ids)
             self.selected_item = {user_id:user_ids == user_id for user_id in unique_users}
-            if select_method == "Fisher":
-                self.fisher_dict = {user_id: 0 for user_id in unique_users}
-                self.is_first = True
+            self.fisher_dict = {user_id: 1e-3*torch.eye(16).to(torch.device("cuda")) for user_id in unique_users}
                 
         unique_users = self.selected_item.keys()
         # 3. Select sample subset for each user
@@ -106,24 +104,19 @@ class ParquetDataset(Dataset):
                 selected_indices = np.random.choice(user_indices,1)
             if select_method == "Fisher":
                 darray = np.array(self.darray)
-                if self.is_first:
-                    selected_indices = np.random.choice(user_indices,1)
-                    #Delta_fisher = model.get_item_fisher(int(user_id),{self.all_cols[col_idx]:torch.tensor([darray[selected_indices,col_idx]]) for col_idx in range(len(self.all_cols))})
-                else:
-                    max_trace = 0
+                max_det = 0
 
-                    fisher_matrix = self.fisher_dict[user_id]
-                    for i in user_indices:
-                        #Delta_fisher = model.get_item_fisher(int(user_id),{self.all_cols[col_idx]:torch.tensor([darray[i,col_idx]]) for col_idx in range(len(self.all_cols))})
-                        #det = torch.det(Delta_fisher+fisher_matrix)
-                        trace = model.get_item_fisher(int(user_id),{self.all_cols[col_idx]:torch.tensor([darray[i,col_idx]]) for col_idx in range(len(self.all_cols))})
-                        #print(fisher_matrix,Delta_fisher,det)
-                        if trace>max_trace:
-                            max_trace = trace
-                            #max_fisher = Delta_fisher
-                            selected_indices = np.array([i])
-                print(selected_indices)
-                #self.fisher_dict[user_id] += Delta_fisher
+                fisher_matrix = self.fisher_dict[user_id]
+                for i in user_indices:
+                    Delta_fisher = model.get_item_fisher(int(user_id),{self.all_cols[col_idx]:torch.tensor([darray[i,col_idx]]) for col_idx in range(len(self.all_cols))})
+                    det = torch.det(Delta_fisher+fisher_matrix)
+                    #trace = model.get_item_fisher(int(user_id),{self.all_cols[col_idx]:torch.tensor([darray[i,col_idx]]) for col_idx in range(len(self.all_cols))})
+                    #print(fisher_matrix,Delta_fisher,det)
+                    if det>max_det:
+                        max_det = det
+                        #max_fisher = Delta_fisher
+                        selected_indices = np.array([i])
+                self.fisher_dict[user_id] += Delta_fisher
             self.selected_item[user_id][selected_indices] = 0
             # Add selected data for this user
             for col_idx in range(len(self.all_cols)):
@@ -143,9 +136,7 @@ class ParquetDataset(Dataset):
         
         if total_selected == 0:
             return np.array([]).reshape(0, len(self.all_cols))
-        
-        if select_method=="Fisher" and self.is_first:
-            self.is_first = False
+
         return np.column_stack(data_arrays)
 
 

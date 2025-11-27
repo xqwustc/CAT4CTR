@@ -73,5 +73,5 @@ class DNN(BaseModel):
                 log_p = torch.log(1-p+1e-10)
             grad = torch.autograd.grad(log_p, self.embedding_layer.embedding_layer.embedding_layers['user'].weight, retain_graph=True, create_graph=False)[0][user]
             weight = p if label == 1. else (1 - p)
-            fisher += weight * torch.sum(grad**2)
+            fisher += weight * torch.outer(grad, grad)
         return fisher.detach()
